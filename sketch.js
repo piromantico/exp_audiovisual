@@ -2,7 +2,6 @@ let vid;
 let reproduciendo = false;
 let fc = 0;
 
-// Configuración individual por efecto
 let cfg = {
   slice: { on: true,  intensidad: 40, velocidad: 5  },
   rgb:   { on: true,  intensidad: 40, velocidad: 5  },
@@ -11,14 +10,11 @@ let cfg = {
 };
 
 function setup() {
-  // ↓↓ CAMBIA AQUÍ EL TAMAÑO DEL CANVAS ↓↓
-  createCanvas(960, 540);
-  // ↑↑ ————————————————————————————————— ↑↑
+  createCanvas(windowWidth, windowHeight);
 
   vid = createVideo('akrii.webm');
   vid.hide();
 
-  // Botón play/pause
   let btnPlay = createButton('▶ Play');
   btnPlay.style('margin', '8px 4px 4px');
   btnPlay.style('padding', '5px 16px');
@@ -39,7 +35,6 @@ function setup() {
     }
   });
 
-  // Controles por efecto
   crearControles('Slice',     'slice');
   crearControles('RGB shift', 'rgb');
   crearControles('Noise',     'noise');
@@ -56,7 +51,6 @@ function crearControles(label, clave) {
   contenedor.style('margin-right', '8px');
   contenedor.style('vertical-align', 'top');
 
-  // Botón toggle
   let btn = createButton(label);
   btn.parent(contenedor);
   btn.style('display', 'block');
@@ -73,7 +67,6 @@ function crearControles(label, clave) {
     btn.style('background', cfg[clave].on ? '#444' : '#888');
   });
 
-  // Slider intensidad
   let labelI = createP('Int: ' + cfg[clave].intensidad);
   labelI.parent(contenedor);
   labelI.style('margin', '2px 0 0');
@@ -88,7 +81,6 @@ function crearControles(label, clave) {
     labelI.html('Int: ' + cfg[clave].intensidad);
   });
 
-  // Slider velocidad
   let labelV = createP('Vel: ' + cfg[clave].velocidad);
   labelV.parent(contenedor);
   labelV.style('margin', '4px 0 0');
@@ -102,6 +94,10 @@ function crearControles(label, clave) {
     cfg[clave].velocidad = sliderV.value();
     labelV.html('Vel: ' + cfg[clave].velocidad);
   });
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
 }
 
 function draw() {
@@ -125,7 +121,6 @@ function draw() {
     image(vid, 0, 0, width, height);
     blendMode(BLEND);
 
-    // filtro rojo
     blendMode(MULTIPLY);
     fill(255, 80, 80, cfg.rgb.intensidad * 0.6);
     noStroke();

@@ -3,19 +3,51 @@ let reproduciendo = false;
 let fc = 0;
 
 let cfg = {
-  slice: { on: true,  intensidad: 40, velocidad: 5  },
-  rgb:   { on: true,  intensidad: 40, velocidad: 5  },
-  noise: { on: false, intensidad: 40, velocidad: 5  },
-  scan:  { on: false, intensidad: 40, velocidad: 5  }
+  slice: { on: true,  intensidad: 40, velocidad: 5 },
+  rgb:   { on: true,  intensidad: 40, velocidad: 5 },
+  noise: { on: false, intensidad: 40, velocidad: 5 },
+  scan:  { on: false, intensidad: 40, velocidad: 5 },
+  ascii: { on: false, intensidad: 40, velocidad: 5 }
 };
+
+const ASCII_CHARS = ' .`^,:;Il!i~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$';
+
+let samplerCanvas, samplerCtx;
+let asciiCanvas,   asciiCtx;
+let scanCanvas,    scanCtx;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
+  frameRate(30);
 
   vid = createVideo('akrii.webm');
   vid.hide();
 
+  // Canvas nativo para ASCII — superpuesto al canvas de p5
+  asciiCanvas = document.createElement('canvas');
+  asciiCanvas.width  = windowWidth;
+  asciiCanvas.height = windowHeight;
+  asciiCanvas.style.position = 'fixed';
+  asciiCanvas.style.top      = '0';
+  asciiCanvas.style.left     = '0';
+  asciiCanvas.style.display  = 'none';
+  asciiCanvas.style.pointerEvents = 'none';
+  document.body.appendChild(asciiCanvas);
+  asciiCtx = asciiCanvas.getContext('2d');
+
+  // Canvas para samplear píxeles del video
+  samplerCanvas = document.createElement('canvas');
+  samplerCtx    = samplerCanvas.getContext('2d');
+
+  // Canvas para el patrón de scanlines
+  scanCanvas = document.createElement('canvas');
+  scanCanvas.width  = 2;
+  scanCanvas.height = 3;
+  scanCtx = scanCanvas.getContext('2d');
+
   let btnPlay = createButton('▶ Play');
+  btnPlay.style('position', 'relative');
+  btnPlay.style('z-index', '10');
   btnPlay.style('margin', '8px 4px 4px');
   btnPlay.style('padding', '5px 16px');
   btnPlay.style('background', '#222');
@@ -39,10 +71,13 @@ function setup() {
   crearControles('RGB shift', 'rgb');
   crearControles('Noise',     'noise');
   crearControles('Scanlines', 'scan');
+  crearControles('ASCII',     'ascii');
 }
 
 function crearControles(label, clave) {
   let contenedor = createDiv('');
+  contenedor.style('position', 'relative');
+  contenedor.style('z-index', '10');
   contenedor.style('margin', '10px 0 4px');
   contenedor.style('padding', '8px 10px');
   contenedor.style('background', '#1a1a1a');
@@ -65,6 +100,9 @@ function crearControles(label, clave) {
   btn.mousePressed(() => {
     cfg[clave].on = !cfg[clave].on;
     btn.style('background', cfg[clave].on ? '#444' : '#888');
+    if (clave === 'ascii') {
+      asciiCanvas.style.display = cfg[clave].on ? 'block' : 'none';
+    }
   });
 
   let labelI = createP('Int: ' + cfg[clave].intensidad);
@@ -98,41 +136,97 @@ function crearControles(label, clave) {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+  asciiCanvas.width  = windowWidth;
+  asciiCanvas.height = windowHeight;
+}
+
+function dibujarASCII() {
+  let vidElem = vid.elt;
+  if (vidElem.readyState < 2) return;
+
+  // Resolución: intensidad controla tamaño de celda (8px a 20px)
+  let tamCelda = floor(map(cfg.ascii.intensidad, 0, 100, 20, 8));
+  let cols     = floor(windowWidth  / tamCelda);
+  let rows     = floor(windowHeight / tamCelda);
+
+  // Redimensionar sampler solo si cambió
+  if (samplerCanvas.width !== cols || samplerCanvas.height !== rows) {
+    samplerCanvas.width  = cols;
+    samplerCanvas.height = rows;
+  }
+
+  // Samplear el video a baja resolución
+  samplerCtx.drawImage(vidElem, 0, 0, cols, rows);
+  let pixeles = samplerCtx.getImageData(0, 0, cols, rows).data;
+
+  let celdaW   = windowWidth  / cols;
+  let celdaH   = windowHeight / rows;
+  let fontSize = floor(min(celdaW, celdaH) * 1.2);
+
+  asciiCtx.fillStyle = '#000';
+  asciiCtx.fillRect(0, 0, windowWidth, windowHeight);
+  asciiCtx.font = fontSize + 'px monospace';
+  asciiCtx.textBaseline = 'top';
+
+  // Un solo loop, fillText directo — sin p5, sin spans, sin innerHTML
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      let idx = (j * cols + i) * 4;
+      let r   = pixeles[idx];
+      let g   = pixeles[idx + 1];
+      let b   = pixeles[idx + 2];
+
+      let brillo  = (r * 299 + g * 587 + b * 114) / 1000;
+      let charIdx = floor(map(brillo, 0, 255, 0, ASCII_CHARS.length - 1));
+
+      asciiCtx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+      asciiCtx.fillText(ASCII_CHARS[charIdx], i * celdaW, j * celdaH);
+    }
+  }
+}
+
+function dibujarScanlines() {
+  scanCtx.clearRect(0, 0, 2, 3);
+  let alfa = map(cfg.scan.intensidad, 0, 100, 0, 0.8);
+  scanCtx.fillStyle = 'rgba(0,0,0,' + alfa + ')';
+  scanCtx.fillRect(0, 0, 2, 1);
+
+  let ctx    = drawingContext;
+  let patron = ctx.createPattern(scanCanvas, 'repeat');
+  ctx.fillStyle = patron;
+  ctx.fillRect(0, 0, width, height);
+
+  noStroke();
+  fill(255, 10);
+  rect(0, (fc * cfg.scan.velocidad * 2) % height, width, 4);
 }
 
 function draw() {
-  frameRate(30);
   background(0);
   fc++;
 
   // 1. RGB shift
   if (cfg.rgb.on) {
     let off = cfg.rgb.intensidad * 0.12;
-
-    // ↓↓ CAMBIA AQUÍ LOS COLORES DEL SHIFT (R, G, B, opacidad) ↓↓
     tint(255, 0, 0, 200);
     image(vid, -off, 0, width, height);
     tint(255, 80, 80, 150);
     image(vid, off, 0, width, height);
-    // ↑↑ ————————————————————————————————————————————————————— ↑↑
-
     noTint();
     blendMode(MULTIPLY);
     image(vid, 0, 0, width, height);
     blendMode(BLEND);
-
     blendMode(MULTIPLY);
     fill(255, 80, 80, cfg.rgb.intensidad * 0.6);
     noStroke();
     rect(0, 0, width, height);
     blendMode(BLEND);
-
   } else {
     noTint();
     image(vid, 0, 0, width, height);
   }
 
-  // 2. Slice shifting
+  // 2. Slice
   if (cfg.slice.on) {
     let intervalo = max(1, floor(20 / cfg.slice.velocidad));
     if (fc % intervalo === 0) {
@@ -159,13 +253,14 @@ function draw() {
 
   // 4. Scanlines
   if (cfg.scan.on) {
-    noStroke();
-    fill(0, cfg.scan.intensidad * 0.5);
-    for (let y = 0; y < height; y += 3) {
-      rect(0, y, width, 1);
+    dibujarScanlines();
+  }
+
+  // 5. ASCII en canvas nativo separado
+  if (cfg.ascii.on) {
+    let intervalo = max(1, floor(20 / cfg.ascii.velocidad));
+    if (fc % intervalo === 0) {
+      dibujarASCII();
     }
-    fill(255, 10);
-    let scanY = (fc * cfg.scan.velocidad * 2) % height;
-    rect(0, scanY, width, 4);
   }
 }
